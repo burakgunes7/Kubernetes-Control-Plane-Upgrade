@@ -185,7 +185,7 @@ function upgrade() {
             exit 1
         fi
 
-        echo_info "Successfully upgraded the control plane to $up_version."
+        echo_info "Successfully upgraded the Kubernetes Control Plane to Version: $up_version."
         echo_info "Waiting a little bit before upgrading to the next version."
         sleep 10
 
