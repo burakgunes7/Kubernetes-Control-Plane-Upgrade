@@ -93,6 +93,10 @@ function check_Ready() {
     echo "$isReady"
 }
 
+function mirantis() {
+    echo "$1" # arguments are accessible through $1, $2,...
+}
+
 function upgrade() {
 
     while [[ $(check_master) != $(check_master_status_ready) ]]; do
