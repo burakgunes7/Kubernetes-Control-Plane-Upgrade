@@ -58,13 +58,6 @@ vers=$(echo $vers | cut -d' ' -f1)
 echo "Your KUBECTL version is $vers"
 echo "==========================================================================="
 
-# echo "==========================================================================="
-# # CHECK MOST CLOSE VERSION TO UPGRADE TO
-# # FIXME: FAILS TO GET KUBEADM UPGRADE PLAN -O JSON
-# upgrade_plan_version=$(sudo kubeadm upgrade plan -o json | grep -oP '(?<="newVersion": ")[^"]*')
-# upgrade_plan_version=$(echo "$upgrade_plan_version" | head -n1 | sed -e 's/\s.*$//')
-# echo "The version that you are going to upgrade to is '$upgrade_plan_version'"
-
 function echo_info() {
     echo "==========================================================================="
     echo "==========================================================================="
@@ -76,7 +69,7 @@ function echo_info() {
 function check_master() {
     local master_node
     master_node=$(
-        kubectl get nodes -o json | jq -r '.items[]  | select(.metadata["labels"]["node-role.kubernetes.io/master"])| .metadata.name'
+        kubectl get nodes -o json | jq -r '.items[]  | select(.metadata["labels"]["node-role.kubernetes.io/master"] or .metadata["labels"]["node-role.kubernetes.io/control-plane"] )| .metadata.name'
     )
     echo "$master_node"
 }
@@ -93,35 +86,120 @@ function check_Ready() {
     echo "$isReady"
 }
 
-function mirantis() {
-    echo "$1" # arguments are accessible through $1, $2,...
+function check_version_24() {
+    # Client's version
+
+    vers_check=$(kubectl version -o json | grep -oP '(?<="gitVersion": ")[^"]*')
+    vers_check=$(echo $vers_check | cut -d' ' -f1)
+    vers_check=$(echo "$vers_check" | sed 's/[.]//g' | sed 's/[v]//g')
+    if [[ ${#vers_check} -eq 4 ]]; then
+        # if body
+        vers_check=$(printf %d0 "$vers_check")
+    fi
+    if [[ "$vers_check" -eq 12400 ]] && [[ ! -f ./.pre-24-success ]]; then
+        updates_after_version_24
+    fi
+
 }
 
-function upgrade() {
+function updates_after_version_24() {
+    set -e
+
+    echo_info "Beginning docker.cri installation."
+
+    # Stop docker and kubelet
+    systemctl stop kubelet docker
+
+    # Update docker
+    update_docker
+
+    # Download mirantis docker.cri
+    local version
+    version=$(curl -sL https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | jq -r ".tag_name")
+    version=$(echo "$version" | sed 's/v//g')
+
+    wget https://github.com/Mirantis/cri-dockerd/releases/download/v"$version"/cri-dockerd_"$version".3-0.ubuntu-focal_amd64.deb
+    sudo gdebi cri-dockerd_"$version".3-0.ubuntu-focal_amd64.deb
+
+    # Kubeadm init again with new docker.cri
+    sudo systemctl stop kubelet docker
+    cd /etc/ || exit
+    sudo mv kubernetes kubernetes-backup
+    sudo mv /var/lib/kubelet /var/lib/kubelet-backup
+    sudo mkdir -p kubernetes
+    sudo cp -r kubernetes-backup/pki kubernetes
+    sudo rm kubernetes/pki/{apiserver.*,etcd/peer.*}
+    sudo systemctl start docker
+    sudo kubeadm init --ignore-preflight-errors=DirAvailable--var-lib-etcd --cri-socket unix:///var/run/cri-dockerd.sock
+
+    # After kubeadm init
+    sudo rm -rf $HOME/.kube
+    mkdir -p $HOME/.kube
+    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+    sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+    # Remove taints from master
+    local master
+    master=$(check_master)
+    kubectl taint node $master node-role.kubernetes.io/master:NoSchedule-
+    kubectl taint node $master node-role.kubernetes.io/control-plane:NoSchedule-
+
+    # Delete all running pods
+    kubectl delete pods --all --grace-period=0 --force -A
+
+    # Remove all docker containers pre init
+    docker ps -qa | xargs docker rm -f
+
+    # if finishes successfuly
+    touch .pre-24-success
+
+    set +e
+
+}
+
+function update_docker() {
+    # This function updates all docker components to the latest versions
+    sudo apt-mark hold kubelet kubeadm kubectl
+    sudo apt update
+    sudo apt upgrade -y docker-ce docker-ce-cli docker-compose-plugin containerd.io
+}
+
+function check_node_status() {
+
+    echo_info "Checking master node status."
 
     while [[ $(check_master) != $(check_master_status_ready) ]]; do
         echo "Waiting for master node to be READY."
         sleep 5
     done
+    echo_info "Master node is up."
+}
+
+function change_Repo_After_Update() {
+    check_node_status
+    kubectl get configmap kubeadm-config -n kube-system -o yaml |
+        sed -e "s/imageRepository: registry.k8s.io/imageRepository: k8s.gcr.io/" |
+        kubectl apply -f - -n kube-system
+
+    echo_info "Changed the repository for Config-Map kubeadm-config from 'registry.k8s.io' to 'k8s.gcr.io'"
+}
+
+function upgrade() {
+
+    check_node_status
 
     local up_version=$1
     echo_info "UPGRADING"
     echo ""
     echo "Please answer with: "
     echo " 'y' for 'yes'"
-    echo " 's' for 'skip this upgrade"
     echo " 'q' for 'quit'"
     echo ""
 
     while true; do
-        read -p "Upgrade to ${up_version}? [y/s/q]: " confirm_upgrade
+        read -p "Upgrade to ${up_version}? [y/q]: " confirm_upgrade
         echo "==========================================================================="
         echo "==========================================================================="
-        if [ "$confirm_upgrade" == "s" ]; then
-            echo "==> Skipping upgrade ${up_version}!"
-            echo ""
-            return 0
-        fi
 
         if [ "${confirm_upgrade,,}" == "q" ]; then
             echo "==> Aborting all upgrades"
@@ -137,11 +215,8 @@ function upgrade() {
 
     echo ""
 
-    # count=0
+    #
     while true; do
-
-        # FIXME: CHECK IF ALL OF THE PODS ARE RUNNING
-        # TODO: CHECK IF NODE IS UP
 
         up_version=$(echo "$up_version" | sed 's/v//g')
 
@@ -156,6 +231,8 @@ function upgrade() {
             exit 1
         fi
 
+        check_node_status
+
         echo_info "Updating control plane to $up_version..."
 
         sleep 10
@@ -168,6 +245,8 @@ function upgrade() {
 
             exit 1
         fi
+
+        check_node_status
 
         echo_info "Updating kubectl and kubelet to $up_version..."
 
@@ -193,6 +272,8 @@ function upgrade() {
         echo_info "Waiting a little bit before upgrading to the next version."
         sleep 10
 
+        change_Repo_After_Update
+
         break
 
     done
@@ -203,20 +284,22 @@ function upgrade() {
 # do the upgrades
 for version in "${UPGRADE_PATH[@]}"; do
 
+    # Client's version
     vers=$(echo "$vers" | sed 's/[.]//g' | sed 's/[v]//g')
     if [[ ${#vers} -eq 4 ]]; then
         # if body
         vers=$(printf %d0 "$vers")
-        # echo "$vers"
     fi
 
+    # List version
     version_mod=$(echo "$version" | sed 's/[.]//g' | sed 's/[v]//g')
     if [[ ${#version_mod} -eq 4 ]]; then
         # if body
         version_mod=$(printf %d0 "$version_mod")
     fi
 
-    # echo "$vers" "$version_mod"
+    check_version_24
+
     if [ "$vers" -lt "$version_mod" ]; then
         # if body
         upgrade "$version"
