@@ -58,6 +58,7 @@ vers=$(echo $vers | cut -d' ' -f1)
 echo "Your KUBECTL version is $vers"
 echo "==========================================================================="
 
+# Echo function
 function echo_info() {
     echo "==========================================================================="
     echo "==========================================================================="
@@ -66,6 +67,7 @@ function echo_info() {
     echo "==========================================================================="
 }
 
+# Gets master nodes name
 function check_master() {
     local master_node
     master_node=$(
@@ -74,18 +76,14 @@ function check_master() {
     echo "$master_node"
 }
 
+# Checks if master node is Ready
 function check_master_status_ready() {
     local node_isReady
     node_isReady=$(kubectl get nodes -o json | jq -r '.items[]  | select(.status.conditions[].reason=="KubeletReady" and .status.conditions[].status=="True") | .metadata.name')
     echo "$node_isReady"
 }
 
-function check_Ready() {
-    local isReady
-    isReady=$(kubectl get no | awk 'BEGIN {FS=" "}{if ($3 == "master" && $2 == "Ready") print "Ready" }')
-    echo "$isReady"
-}
-
+# Checks if Control Plane is v1.24.0
 function check_version_24() {
     # Client's version
 
@@ -102,6 +100,7 @@ function check_version_24() {
 
 }
 
+# Installs the requirements that are needed after v1.24.0 such as: docker.cri...
 function updates_after_version_24() {
     set -e
 
@@ -157,6 +156,7 @@ function updates_after_version_24() {
 
 }
 
+# Updates docker to latest
 function update_docker() {
     # This function updates all docker components to the latest versions
     sudo apt-mark hold kubelet kubeadm kubectl
@@ -164,6 +164,7 @@ function update_docker() {
     sudo apt upgrade -y docker-ce docker-ce-cli docker-compose-plugin containerd.io
 }
 
+# Function for checking master nodes readiness
 function check_node_status() {
 
     echo_info "Checking master node status."
@@ -175,6 +176,7 @@ function check_node_status() {
     echo_info "Master node is up."
 }
 
+# Change image repository of kubeadm after every upgrade
 function change_Repo_After_Update() {
     check_node_status
     kubectl get configmap kubeadm-config -n kube-system -o yaml |
@@ -184,6 +186,7 @@ function change_Repo_After_Update() {
     echo_info "Changed the repository for Config-Map kubeadm-config from 'registry.k8s.io' to 'k8s.gcr.io'"
 }
 
+# Upgrade loop
 function upgrade() {
 
     check_node_status
@@ -220,6 +223,8 @@ function upgrade() {
 
         up_version=$(echo "$up_version" | sed 's/v//g')
 
+        # Upgrade Kubeadm
+
         echo_info "Updating kubeadm to $up_version..."
 
         sudo apt-mark unhold kubeadm &&
@@ -230,6 +235,8 @@ function upgrade() {
             echo_info "FAILED to upgrade kubeadm to $up_version..."
             exit 1
         fi
+
+        # Upgrade Control Plane
 
         check_node_status
 
@@ -245,6 +252,8 @@ function upgrade() {
 
             exit 1
         fi
+
+        # Upgrade kubectl and kubelet
 
         check_node_status
 
@@ -272,14 +281,13 @@ function upgrade() {
         echo_info "Waiting a little bit before upgrading to the next version."
         sleep 10
 
+        # Change image repository of kubeadm after every upgrade
         change_Repo_After_Update
 
         break
 
     done
 }
-
-# TODO: CHECK WHICH VERSION BEFORE UPGRADING
 
 # do the upgrades
 for version in "${UPGRADE_PATH[@]}"; do
