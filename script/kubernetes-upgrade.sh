@@ -307,4 +307,5 @@ for version in "${UPGRADE_PATH[@]}"; do
 
 done
 
+sudo rm .pre-24-success
 echo "All upgrades completed"
