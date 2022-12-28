@@ -291,16 +291,17 @@ for version in "${UPGRADE_PATH[@]}"; do
         vers=$(printf %d0 "$vers")
     fi
 
-    # List version
-    version_mod=$(echo "$version" | sed 's/[.]//g' | sed 's/[v]//g')
-    if [[ ${#version_mod} -eq 4 ]]; then
+    # Upgrade Path version
+    version_upgrade_path=$(echo "$version" | sed 's/[.]//g' | sed 's/[v]//g')
+    if [[ ${#version_upgrade_path} -eq 4 ]]; then
         # if body
-        version_mod=$(printf %d0 "$version_mod")
+        version_upgrade_path=$(printf %d0 "$version_upgrade_path")
     fi
 
+    # Check kubernetes control plane version : if it is v1.24.0 install docker.cri
     check_version_24
 
-    if [ "$vers" -lt "$version_mod" ]; then
+    if [ "$vers" -lt "$version_upgrade_path" ]; then
         # if body
         upgrade "$version"
     fi
