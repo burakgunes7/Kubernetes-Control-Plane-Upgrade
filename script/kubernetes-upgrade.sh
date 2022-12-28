@@ -151,7 +151,7 @@ function updates_after_version_24() {
     docker ps -qa | xargs docker rm -f
 
     # if finishes successfuly
-    touch .pre-24-success
+    sudo touch .pre-24-success
 
     set +e
 
