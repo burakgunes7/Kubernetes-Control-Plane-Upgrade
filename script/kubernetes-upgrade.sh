@@ -58,10 +58,6 @@ vers=$(echo $vers | cut -d' ' -f1)
 echo "Your KUBECTL version is $vers"
 echo "==========================================================================="
 
-# Installing jq packet for upgrade operations
-echo_info "Installing JQ packet for upgrade operations."
-sudo apt install jq -y
-
 # Echo function
 function echo_info() {
     echo "==========================================================================="
@@ -70,6 +66,10 @@ function echo_info() {
     echo "==========================================================================="
     echo "==========================================================================="
 }
+
+# Installing jq packet for upgrade operations
+echo_info "Installing JQ packet for upgrade operations."
+sudo apt install jq -y
 
 # Gets master nodes name
 function check_master() {
