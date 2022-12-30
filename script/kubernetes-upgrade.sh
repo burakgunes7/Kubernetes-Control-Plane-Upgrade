@@ -288,6 +288,24 @@ function upgrade() {
         # Change image repository of kubeadm after every upgrade
         change_Repo_After_Update
 
+        while true; do
+            echo_info "Before resuming your upgrade; you should upgrade kubeadm, kubelet, kubectl on your worker nodes to ${up_version} "
+            read -p "Did you upgrade them to ${up_version} [y/q]: " confirm_worker_node_upgrade
+            echo "==========================================================================="
+            echo "==========================================================================="
+
+            if [ "${confirm_worker_node_upgrade,,}" == "q" ]; then
+                echo "==> Aborting all upgrades"
+                exit 1
+            fi
+
+            if [ "${confirm_worker_node_upgrade,,}" == "y" ]; then
+                break
+            fi
+
+            echo "Unknown answer, please try again"
+        done
+
         break
 
     done
