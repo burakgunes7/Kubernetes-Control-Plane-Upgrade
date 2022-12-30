@@ -58,6 +58,9 @@ vers=$(echo $vers | cut -d' ' -f1)
 echo "Your KUBECTL version is $vers"
 echo "==========================================================================="
 
+# Installing jq packet for upgrade operations
+sudo apt install jq -y
+
 # Echo function
 function echo_info() {
     echo "==========================================================================="
