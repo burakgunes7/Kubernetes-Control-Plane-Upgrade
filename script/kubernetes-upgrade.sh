@@ -83,7 +83,7 @@ function check_master() {
 # Checks if master node is Ready
 function check_master_status_ready() {
     local node_isReady
-    node_isReady=$(kubectl get nodes -o json | jq -r '.items[]  | select(.status.conditions[].reason=="KubeletReady" and .status.conditions[].status=="True") | .metadata.name')
+    node_isReady=$(kubectl get nodes -o json | jq -r '.items[]  | select(.metadata["labels"]["node-role.kubernetes.io/master"] or .metadata["labels"]["node-role.kubernetes.io/control-plane"] ) | select(.status.conditions[].reason=="KubeletReady" and .status.conditions[].status=="True") | .metadata.name')
     echo "$node_isReady"
 }
 
