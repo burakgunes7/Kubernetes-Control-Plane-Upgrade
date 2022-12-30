@@ -59,6 +59,7 @@ echo "Your KUBECTL version is $vers"
 echo "==========================================================================="
 
 # Installing jq packet for upgrade operations
+echo_info "Installing JQ packet for upgrade operations."
 sudo apt install jq -y
 
 # Echo function
