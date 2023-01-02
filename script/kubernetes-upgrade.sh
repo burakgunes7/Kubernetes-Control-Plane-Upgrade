@@ -71,6 +71,10 @@ function echo_info() {
 echo_info "Installing JQ packet for upgrade operations."
 sudo apt install jq -y
 
+# Installing gdebi for upgrade operations
+echo_info "Installing GDEBI packet for upgrade operations."
+sudo apt install gdebi -y
+
 # Gets master nodes name
 function check_master() {
     local master_node
